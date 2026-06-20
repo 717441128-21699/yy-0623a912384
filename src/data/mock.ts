@@ -1,0 +1,175 @@
+import type { Batch, Inspection, Issue } from '@/types';
+
+export const CATEGORIES = ['钢筋', '水泥', '防水卷材', '混凝土', '砖块', '砂石', '其他'] as const;
+
+export const RESPONSIBLE_UNITS = ['供应商', '运输方', '总包项目部', '分包单位', '其他'] as const;
+
+export const DEFAULT_CHECK_ITEMS = [
+  { name: '外观质量', passed: null as boolean | null },
+  { name: '数量核对', passed: null as boolean | null },
+  { name: '合格证', passed: null as boolean | null },
+  { name: '检测报告', passed: null as boolean | null },
+];
+
+const now = new Date();
+const fmt = (d: Date) => d.toISOString();
+const daysAgo = (n: number) => {
+  const d = new Date(now);
+  d.setDate(d.getDate() - n);
+  return fmt(d);
+};
+
+export const mockBatches: Batch[] = [
+  {
+    id: 'B001',
+    category: '钢筋',
+    supplier: '鞍钢集团有限公司',
+    specification: 'HRB400 Φ12',
+    contractQuantity: 50000,
+    unit: 'kg',
+    plateNumber: '辽A88567',
+    arrivalTime: daysAgo(0),
+    deliveryPhotos: ['https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=delivery%20note%20document%20for%20steel%20rebar%20construction%20material%20close%20up%20photo&image_size=landscape_4_3'],
+    status: '待验收',
+    createdBy: '材料员',
+    createdAt: daysAgo(0),
+  },
+  {
+    id: 'B002',
+    category: '水泥',
+    supplier: '海螺水泥股份有限公司',
+    specification: 'P.O 42.5',
+    contractQuantity: 200,
+    unit: '吨',
+    plateNumber: '皖B33219',
+    arrivalTime: daysAgo(1),
+    deliveryPhotos: ['https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=cement%20delivery%20receipt%20construction%20document%20close%20up&image_size=landscape_4_3'],
+    status: '验收中',
+    createdBy: '材料员',
+    createdAt: daysAgo(1),
+  },
+  {
+    id: 'B003',
+    category: '防水卷材',
+    supplier: '东方雨虹防水技术股份有限公司',
+    specification: 'SBS 4mm',
+    contractQuantity: 5000,
+    unit: 'm²',
+    plateNumber: '京C77612',
+    arrivalTime: daysAgo(2),
+    deliveryPhotos: ['https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=waterproof%20membrane%20delivery%20note%20construction&image_size=landscape_4_3'],
+    status: '已完成',
+    createdBy: '材料员',
+    createdAt: daysAgo(2),
+  },
+  {
+    id: 'B004',
+    category: '钢筋',
+    supplier: '宝钢股份有限公司',
+    specification: 'HRB400 Φ20',
+    contractQuantity: 80000,
+    unit: 'kg',
+    plateNumber: '沪D55198',
+    arrivalTime: daysAgo(3),
+    deliveryPhotos: ['https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=steel%20rebar%20delivery%20note%20construction%20site&image_size=landscape_4_3'],
+    status: '已完成',
+    createdBy: '材料员',
+    createdAt: daysAgo(3),
+  },
+  {
+    id: 'B005',
+    category: '混凝土',
+    supplier: '中建商混站',
+    specification: 'C30',
+    contractQuantity: 120,
+    unit: 'm³',
+    plateNumber: '鄂A44123',
+    arrivalTime: daysAgo(0),
+    deliveryPhotos: [],
+    status: '待验收',
+    createdBy: '材料员',
+    createdAt: daysAgo(0),
+  },
+];
+
+export const mockInspections: Inspection[] = [
+  {
+    id: 'I001',
+    batchId: 'B002',
+    checkItems: [
+      { name: '外观质量', passed: true },
+      { name: '数量核对', passed: true },
+      { name: '合格证', passed: true },
+      { name: '检测报告', passed: false, remark: '检测报告编号与送货单不符' },
+    ],
+    result: '需复检',
+    inspector: '质检员',
+    inspectedAt: daysAgo(1),
+    supervisorOpinion: '',
+    supervisor: '',
+    signedAt: null,
+  },
+  {
+    id: 'I002',
+    batchId: 'B003',
+    checkItems: [
+      { name: '外观质量', passed: true },
+      { name: '数量核对', passed: true },
+      { name: '合格证', passed: true },
+      { name: '检测报告', passed: true },
+    ],
+    result: '可接收',
+    inspector: '质检员',
+    inspectedAt: daysAgo(2),
+    supervisorOpinion: '同意接收，材料质量合格。',
+    supervisor: '监理工程师',
+    signedAt: daysAgo(2),
+  },
+  {
+    id: 'I003',
+    batchId: 'B004',
+    checkItems: [
+      { name: '外观质量', passed: false, remark: '部分钢筋表面有锈蚀' },
+      { name: '数量核对', passed: true },
+      { name: '合格证', passed: true },
+      { name: '检测报告', passed: false, remark: '批号与合格证不一致' },
+    ],
+    result: '拒收',
+    inspector: '质检员',
+    inspectedAt: daysAgo(3),
+    supervisorOpinion: '钢筋存在锈蚀，批号不符，拒收处理。',
+    supervisor: '监理工程师',
+    signedAt: daysAgo(3),
+  },
+];
+
+export const mockIssues: Issue[] = [
+  {
+    id: 'Q001',
+    inspectionId: 'I003',
+    batchId: 'B004',
+    description: '钢筋表面锈蚀，批号与合格证不一致',
+    responsibleUnit: '供应商',
+    reviewDate: daysAgo(1),
+    rectificationPhotos: [],
+    rectificationNote: '',
+    status: '整改中',
+    createdBy: '监理工程师',
+    createdAt: daysAgo(3),
+    closedAt: null,
+  },
+  {
+    id: 'Q002',
+    inspectionId: 'I001',
+    batchId: 'B002',
+    description: '水泥检测报告编号与送货单不符，需补正',
+    responsibleUnit: '供应商',
+    reviewDate: daysAgo(0),
+    rectificationPhotos: ['https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=corrected%20inspection%20report%20document%20cement&image_size=landscape_4_3'],
+    rectificationNote: '供应商已补发正确检测报告，编号已核实一致。',
+    status: '待整改',
+    createdBy: '监理工程师',
+    createdAt: daysAgo(1),
+    closedAt: null,
+  },
+];
