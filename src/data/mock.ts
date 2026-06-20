@@ -108,6 +108,26 @@ export const mockInspections: Inspection[] = [
     supervisorOpinion: '',
     supervisor: '',
     signedAt: null,
+    reinspectionCount: 0,
+    lastReinspectionAt: null,
+    reinspectionNote: '',
+    logs: [
+      {
+        id: 'L001',
+        type: 'start_inspection',
+        operator: '质检员',
+        timestamp: daysAgo(1),
+        description: '开始现场验收',
+      },
+      {
+        id: 'L002',
+        type: 'submit_result',
+        operator: '质检员',
+        timestamp: daysAgo(1),
+        description: '提交验收结论：需复检',
+        details: { failedItems: ['检测报告'] },
+      },
+    ],
   },
   {
     id: 'I002',
@@ -124,6 +144,33 @@ export const mockInspections: Inspection[] = [
     supervisorOpinion: '同意接收，材料质量合格。',
     supervisor: '监理工程师',
     signedAt: daysAgo(2),
+    reinspectionCount: 0,
+    lastReinspectionAt: null,
+    reinspectionNote: '',
+    logs: [
+      {
+        id: 'L003',
+        type: 'start_inspection',
+        operator: '质检员',
+        timestamp: daysAgo(2),
+        description: '开始现场验收',
+      },
+      {
+        id: 'L004',
+        type: 'submit_result',
+        operator: '质检员',
+        timestamp: daysAgo(2),
+        description: '提交验收结论：可接收',
+        details: { failedItems: [] },
+      },
+      {
+        id: 'L005',
+        type: 'sign',
+        operator: '监理工程师',
+        timestamp: daysAgo(2),
+        description: '监理签署意见',
+      },
+    ],
   },
   {
     id: 'I003',
@@ -140,6 +187,40 @@ export const mockInspections: Inspection[] = [
     supervisorOpinion: '钢筋存在锈蚀，批号不符，拒收处理。',
     supervisor: '监理工程师',
     signedAt: daysAgo(3),
+    reinspectionCount: 0,
+    lastReinspectionAt: null,
+    reinspectionNote: '',
+    logs: [
+      {
+        id: 'L006',
+        type: 'start_inspection',
+        operator: '质检员',
+        timestamp: daysAgo(3),
+        description: '开始现场验收',
+      },
+      {
+        id: 'L007',
+        type: 'submit_result',
+        operator: '质检员',
+        timestamp: daysAgo(3),
+        description: '提交验收结论：拒收',
+        details: { failedItems: ['外观质量', '检测报告'] },
+      },
+      {
+        id: 'L008',
+        type: 'sign',
+        operator: '监理工程师',
+        timestamp: daysAgo(3),
+        description: '监理签署意见',
+      },
+      {
+        id: 'L009',
+        type: 'create_issue',
+        operator: '监理工程师',
+        timestamp: daysAgo(3),
+        description: '生成整改单 Q001',
+      },
+    ],
   },
 ];
 
@@ -157,6 +238,7 @@ export const mockIssues: Issue[] = [
     createdBy: '监理工程师',
     createdAt: daysAgo(3),
     closedAt: null,
+    isDraft: false,
   },
   {
     id: 'Q002',
@@ -171,5 +253,6 @@ export const mockIssues: Issue[] = [
     createdBy: '监理工程师',
     createdAt: daysAgo(1),
     closedAt: null,
+    isDraft: false,
   },
 ];

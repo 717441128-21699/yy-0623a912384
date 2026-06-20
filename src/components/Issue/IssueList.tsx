@@ -20,7 +20,9 @@ export default function IssueList() {
   const [filter, setFilter] = useState<StatusFilter>('全部');
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
 
-  const filtered = issues.filter((i) => filter === '全部' || i.status === filter);
+  const draftIssues = issues.filter((i) => i.isDraft);
+  const formalIssues = issues.filter((i) => !i.isDraft);
+  const filtered = formalIssues.filter((i) => filter === '全部' || i.status === filter);
 
   const getBatch = (batchId: string) => batches.find((b) => b.id === batchId);
   const getInspection = (inspectionId: string) => inspections.find((i) => i.id === inspectionId);
@@ -29,8 +31,20 @@ export default function IssueList() {
     <div className="space-y-4">
       <div>
         <h2 className="text-xl font-bold text-zinc-900">问题闭环</h2>
-        <p className="text-sm text-zinc-500 mt-0.5">共 {issues.length} 条整改单</p>
+        <p className="text-sm text-zinc-500 mt-0.5">共 {formalIssues.length} 条整改单</p>
       </div>
+
+      {draftIssues.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <p className="text-sm font-semibold text-amber-700 mb-2">
+            <AlertCircle size={14} className="inline mr-1.5" />
+            有 {draftIssues.length} 条待确认的问题草稿
+          </p>
+          <p className="text-xs text-amber-600">
+            请在对应验收单的监理签署中确认责任单位和复查日期后，草稿将自动转为正式整改单。
+          </p>
+        </div>
+      )}
 
       <div className="flex gap-1.5">
         {statusFilters.map((s) => (

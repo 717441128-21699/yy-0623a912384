@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Batch, Inspection, Issue, UserRole, CheckItem } from '@/types';
+import type { Batch, Inspection, Issue, UserRole, CheckItem, OperationLog } from '@/types';
 import { mockBatches, mockInspections, mockIssues, DEFAULT_CHECK_ITEMS } from '@/data/mock';
 
 interface AppState {
@@ -8,7 +8,7 @@ interface AppState {
   batches: Batch[];
   inspections: Inspection[];
   issues: Issue[];
-  counters: { batch: number; inspection: number; issue: number };
+  counters: { batch: number; inspection: number; issue: number; log: number };
 
   setRole: (role: UserRole) => void;
   addBatch: (batch: Omit<Batch, 'id' | 'status' | 'createdAt'>) => void;
@@ -17,9 +17,14 @@ interface AppState {
   updateCheckItem: (inspectionId: string, itemIndex: number, passed: boolean | null, remark?: string) => void;
   submitInspection: (inspectionId: string) => void;
   signInspection: (inspectionId: string, opinion: string) => void;
-  addIssue: (issue: Omit<Issue, 'id' | 'status' | 'createdAt' | 'closedAt' | 'rectificationPhotos' | 'rectificationNote'>) => void;
+  addIssue: (issue: Omit<Issue, 'id' | 'status' | 'createdAt' | 'closedAt' | 'rectificationPhotos' | 'rectificationNote'> & { isDraft?: boolean }) => void;
   submitRectification: (issueId: string, photos: string[], note: string) => void;
   closeIssue: (issueId: string) => void;
+  startReinspection: (inspectionId: string) => void;
+  submitReinspection: (inspectionId: string, note: string) => void;
+  createIssueDraft: (inspectionId: string) => Issue | null;
+  updateIssueDraft: (issueId: string, data: Partial<Issue>) => void;
+  addLog: (inspectionId: string, log: Omit<OperationLog, 'id' | 'timestamp'>) => void;
 }
 
 function extractNum(id: string): number {
@@ -31,7 +36,11 @@ function initCounters(batches: Batch[], inspections: Inspection[], issues: Issue
   const b = batches.reduce((max, x) => Math.max(max, extractNum(x.id)), 0);
   const i = inspections.reduce((max, x) => Math.max(max, extractNum(x.id)), 0);
   const q = issues.reduce((max, x) => Math.max(max, extractNum(x.id)), 0);
-  return { batch: b, inspection: i, issue: q };
+  const l = inspections.reduce(
+    (max, x) => Math.max(max, x.logs.reduce((m, log) => Math.max(m, extractNum(log.id)), 0)),
+    0
+  );
+  return { batch: b, inspection: i, issue: q, log: l };
 }
 
 const nextId = (prefix: string, num: number) => `${prefix}${String(num).padStart(3, '0')}`;
@@ -45,10 +54,81 @@ export const calculateResult = (checkItems: CheckItem[]): Inspection['result'] =
   return '可接收';
 };
 
+export const predictResult = (checkItems: CheckItem[]): { predicted: Inspection['result'] | '预计可接收' | '预计需复检' | '预计拒收'; failedCount: number; uncheckedCount: number } => {
+  const failedCount = checkItems.filter((c) => c.passed === false).length;
+  const uncheckedCount = checkItems.filter((c) => c.passed === null).length;
+
+  if (uncheckedCount === 0) {
+    if (failedCount >= 2) return { predicted: '拒收', failedCount, uncheckedCount };
+    if (failedCount === 1) return { predicted: '需复检', failedCount, uncheckedCount };
+    return { predicted: '可接收', failedCount, uncheckedCount };
+  }
+
+  if (failedCount >= 2) {
+    return { predicted: '预计拒收', failedCount, uncheckedCount };
+  }
+  if (failedCount === 1) {
+    return { predicted: '预计需复检', failedCount, uncheckedCount };
+  }
+  return { predicted: '预计可接收', failedCount, uncheckedCount };
+};
+
 export const useStore = create<AppState>()(
   persist(
     (set, get) => {
       const initialCounters = initCounters(mockBatches, mockInspections, mockIssues);
+
+      const addLog = (inspectionId: string, log: Omit<OperationLog, 'id' | 'timestamp'>) => {
+        set((s) => {
+          const newLogId = nextId('L', s.counters.log + 1);
+          const newLog: OperationLog = {
+            ...log,
+            id: newLogId,
+            timestamp: new Date().toISOString(),
+          };
+          return {
+            counters: { ...s.counters, log: s.counters.log + 1 },
+            inspections: s.inspections.map((insp) =>
+              insp.id === inspectionId
+                ? { ...insp, logs: [...insp.logs, newLog] }
+                : insp
+            ),
+          };
+        });
+      };
+
+      const createIssueDraft = (inspectionId: string): Issue | null => {
+        const state = get();
+        const insp = state.inspections.find((i) => i.id === inspectionId);
+        const batch = state.batches.find((b) => b.id === insp?.batchId);
+        if (!insp || !batch) return null;
+
+        const failedItems = insp.checkItems.filter((c) => c.passed === false);
+        if (failedItems.length === 0) return null;
+
+        const descriptions = failedItems
+          .map((item) => `${item.name}${item.remark ? `（${item.remark}）` : ''}`)
+          .join('；');
+
+        const draft: Issue = {
+          id: '',
+          inspectionId,
+          batchId: batch.id,
+          description: `${batch.category} ${batch.specification}：${descriptions}`,
+          responsibleUnit: '供应商',
+          reviewDate: '',
+          rectificationPhotos: [],
+          rectificationNote: '',
+          status: '待整改',
+          createdBy: state.currentRole,
+          createdAt: new Date().toISOString(),
+          closedAt: null,
+          isDraft: true,
+        };
+
+        return draft;
+      };
+
       return {
         currentRole: '材料员',
         batches: mockBatches,
@@ -82,8 +162,11 @@ export const useStore = create<AppState>()(
         addInspection: (batchId) => {
           const state = get();
           const newNum = state.counters.inspection + 1;
+          const inspId = nextId('I', newNum);
+          const logId = nextId('L', state.counters.log + 1);
+
           const newInspection: Inspection = {
-            id: nextId('I', newNum),
+            id: inspId,
             batchId,
             checkItems: DEFAULT_CHECK_ITEMS.map((item) => ({ ...item })),
             result: null,
@@ -92,10 +175,22 @@ export const useStore = create<AppState>()(
             supervisorOpinion: '',
             supervisor: '',
             signedAt: null,
+            reinspectionCount: 0,
+            lastReinspectionAt: null,
+            reinspectionNote: '',
+            logs: [
+              {
+                id: logId,
+                type: 'start_inspection',
+                operator: state.currentRole,
+                timestamp: new Date().toISOString(),
+                description: '开始现场验收',
+              },
+            ],
           };
           set((s) => ({
             inspections: [newInspection, ...s.inspections],
-            counters: { ...s.counters, inspection: newNum },
+            counters: { ...s.counters, inspection: newNum, log: s.counters.log + 1 },
             batches: s.batches.map((b) =>
               b.id === batchId ? { ...b, status: '验收中' as const } : b
             ),
@@ -114,15 +209,35 @@ export const useStore = create<AppState>()(
         },
 
         submitInspection: (inspectionId) => {
+          const state = get();
+          const insp = state.inspections.find((i) => i.id === inspectionId);
+          if (!insp) return;
+
+          const result = calculateResult(insp.checkItems);
+          if (!result) return;
+
+          const failedItems = insp.checkItems.filter((c) => c.passed === false).map((c) => c.name);
+
           set((s) => {
-            const insp = s.inspections.find((i) => i.id === inspectionId);
-            if (!insp) return s;
-            const result = calculateResult(insp.checkItems);
-            if (!result) return s;
+            const newLogId = nextId('L', s.counters.log + 1);
+            const newLog: OperationLog = {
+              id: newLogId,
+              type: 'submit_result',
+              operator: s.currentRole,
+              timestamp: new Date().toISOString(),
+              description: `提交验收结论：${result}`,
+              details: { failedItems },
+            };
 
             const updatedInspections = s.inspections.map((i) =>
               i.id === inspectionId
-                ? { ...i, result, inspector: s.currentRole, inspectedAt: new Date().toISOString() }
+                ? {
+                    ...i,
+                    result,
+                    inspector: s.currentRole,
+                    inspectedAt: new Date().toISOString(),
+                    logs: [...i.logs, newLog],
+                  }
                 : i
             );
 
@@ -131,23 +246,63 @@ export const useStore = create<AppState>()(
               b.id === batchId ? { ...b, status: '已完成' as const } : b
             );
 
-            return { inspections: updatedInspections, batches: updatedBatches };
+            let updatedIssues = s.issues;
+            let newCounters = { ...s.counters, log: s.counters.log + 1 };
+
+            if (result === '需复检' || result === '拒收') {
+              const draft = createIssueDraft(inspectionId);
+              if (draft) {
+                const newIssueId = nextId('Q', newCounters.issue + 1);
+                const newIssue: Issue = {
+                  ...draft,
+                  id: newIssueId,
+                };
+                updatedIssues = [newIssue, ...s.issues];
+                newCounters = { ...newCounters, issue: newCounters.issue + 1 };
+              }
+            }
+
+            return {
+              inspections: updatedInspections,
+              batches: updatedBatches,
+              issues: updatedIssues,
+              counters: newCounters,
+            };
           });
         },
 
         signInspection: (inspectionId, opinion) => {
-          set((s) => ({
-            inspections: s.inspections.map((i) =>
+          const state = get();
+          const insp = state.inspections.find((i) => i.id === inspectionId);
+          if (!insp) return;
+
+          set((s) => {
+            const newLogId = nextId('L', s.counters.log + 1);
+            const newLog: OperationLog = {
+              id: newLogId,
+              type: 'sign',
+              operator: s.currentRole,
+              timestamp: new Date().toISOString(),
+              description: '监理签署意见',
+            };
+
+            const updatedInspections = s.inspections.map((i) =>
               i.id === inspectionId
                 ? {
                     ...i,
                     supervisorOpinion: opinion,
                     supervisor: s.currentRole,
                     signedAt: new Date().toISOString(),
+                    logs: [...i.logs, newLog],
                   }
                 : i
-            ),
-          }));
+            );
+
+            return {
+              inspections: updatedInspections,
+              counters: { ...s.counters, log: s.counters.log + 1 },
+            };
+          });
         },
 
         addIssue: (issue) => {
@@ -161,10 +316,36 @@ export const useStore = create<AppState>()(
             status: '待整改',
             createdAt: new Date().toISOString(),
             closedAt: null,
+            isDraft: issue.isDraft ?? false,
           };
+
+          set((s) => {
+            const newLogId = nextId('L', s.counters.log + 1);
+            const newLog: OperationLog = {
+              id: newLogId,
+              type: 'create_issue',
+              operator: s.currentRole,
+              timestamp: new Date().toISOString(),
+              description: `生成整改单 ${newIssue.id}`,
+            };
+
+            return {
+              issues: [newIssue, ...s.issues],
+              inspections: s.inspections.map((i) =>
+                i.id === issue.inspectionId
+                  ? { ...i, logs: [...i.logs, newLog] }
+                  : i
+              ),
+              counters: { ...s.counters, issue: newNum, log: s.counters.log + 1 },
+            };
+          });
+        },
+
+        updateIssueDraft: (issueId, data) => {
           set((s) => ({
-            issues: [newIssue, ...s.issues],
-            counters: { ...s.counters, issue: newNum },
+            issues: s.issues.map((iss) =>
+              iss.id === issueId ? { ...iss, ...data, isDraft: false } : iss
+            ),
           }));
         },
 
@@ -179,14 +360,92 @@ export const useStore = create<AppState>()(
         },
 
         closeIssue: (issueId) => {
+          const state = get();
+          const issue = state.issues.find((i) => i.id === issueId);
+          if (!issue) return;
+
+          set((s) => {
+            const newLogId = nextId('L', s.counters.log + 1);
+            const newLog: OperationLog = {
+              id: newLogId,
+              type: 'close_issue',
+              operator: s.currentRole,
+              timestamp: new Date().toISOString(),
+              description: `整改单 ${issueId} 已关闭`,
+            };
+
+            return {
+              issues: s.issues.map((iss) =>
+                iss.id === issueId
+                  ? { ...iss, status: '已关闭' as const, closedAt: new Date().toISOString() }
+                  : iss
+              ),
+              inspections: s.inspections.map((i) =>
+                i.id === issue.inspectionId
+                  ? { ...i, logs: [...i.logs, newLog] }
+                  : i
+              ),
+              counters: { ...s.counters, log: s.counters.log + 1 },
+            };
+          });
+        },
+
+        startReinspection: (inspectionId) => {
           set((s) => ({
-            issues: s.issues.map((iss) =>
-              iss.id === issueId
-                ? { ...iss, status: '已关闭' as const, closedAt: new Date().toISOString() }
-                : iss
+            inspections: s.inspections.map((insp) =>
+              insp.id === inspectionId
+                ? {
+                    ...insp,
+                    result: null,
+                    checkItems: DEFAULT_CHECK_ITEMS.map((item) => ({ ...item })),
+                  }
+                : insp
             ),
           }));
         },
+
+        submitReinspection: (inspectionId, note) => {
+          const state = get();
+          const insp = state.inspections.find((i) => i.id === inspectionId);
+          if (!insp) return;
+
+          const result = calculateResult(insp.checkItems);
+          if (!result) return;
+
+          const failedItems = insp.checkItems.filter((c) => c.passed === false).map((c) => c.name);
+
+          set((s) => {
+            const newLogId = nextId('L', s.counters.log + 1);
+            const newLog: OperationLog = {
+              id: newLogId,
+              type: 'reinspection',
+              operator: s.currentRole,
+              timestamp: new Date().toISOString(),
+              description: `复检结论：${result}${note ? ` - ${note}` : ''}`,
+              details: { failedItems, note },
+            };
+
+            return {
+              inspections: s.inspections.map((i) =>
+                i.id === inspectionId
+                  ? {
+                      ...i,
+                      result,
+                      reinspectionCount: i.reinspectionCount + 1,
+                      lastReinspectionAt: new Date().toISOString(),
+                      reinspectionNote: note,
+                      inspectedAt: new Date().toISOString(),
+                      logs: [...i.logs, newLog],
+                    }
+                  : i
+              ),
+              counters: { ...s.counters, log: s.counters.log + 1 },
+            };
+          });
+        },
+
+        addLog,
+        createIssueDraft,
       };
     },
     {

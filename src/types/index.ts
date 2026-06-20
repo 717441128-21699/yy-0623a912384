@@ -8,10 +8,21 @@ export type IssueStatus = '待整改' | '整改中' | '已关闭';
 
 export type UserRole = '材料员' | '质检员' | '监理工程师';
 
+export type LogType = 'start_inspection' | 'submit_result' | 'sign' | 'create_issue' | 'reinspection' | 'close_issue';
+
 export interface CheckItem {
   name: string;
   passed: boolean | null;
   remark?: string;
+}
+
+export interface OperationLog {
+  id: string;
+  type: LogType;
+  operator: string;
+  timestamp: string;
+  description: string;
+  details?: Record<string, unknown>;
 }
 
 export interface Batch {
@@ -39,6 +50,10 @@ export interface Inspection {
   supervisorOpinion: string;
   supervisor: string;
   signedAt: string | null;
+  reinspectionCount: number;
+  lastReinspectionAt: string | null;
+  reinspectionNote: string;
+  logs: OperationLog[];
 }
 
 export interface Issue {
@@ -54,4 +69,5 @@ export interface Issue {
   createdBy: string;
   createdAt: string;
   closedAt: string | null;
+  isDraft: boolean;
 }
