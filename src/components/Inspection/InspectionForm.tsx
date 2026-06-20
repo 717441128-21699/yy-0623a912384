@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Check, XCircle, AlertTriangle, CheckCircle2, Clock, FileCheck, User, PenLine, RefreshCw, AlertCircle } from 'lucide-react';
+import { X, Check, XCircle, AlertTriangle, CheckCircle2, Clock, FileCheck, User, PenLine, RefreshCw, AlertCircle, FileText, History } from 'lucide-react';
 import { useStore, predictResult } from '@/store/useStore';
 import StatusBadge from '@/components/ui/StatusBadge';
 import PhotoGrid from '@/components/ui/PhotoGrid';
@@ -16,7 +16,8 @@ const logIcons: Record<OperationLog['type'], React.ElementType> = {
   submit_result: CheckCircle2,
   sign: PenLine,
   create_issue: AlertCircle,
-  reinspection: RefreshCw,
+  start_reinspection: RefreshCw,
+  submit_reinspection: RefreshCw,
   close_issue: CheckCircle2,
 };
 
@@ -25,7 +26,8 @@ const logColors: Record<OperationLog['type'], string> = {
   submit_result: 'bg-orange-500',
   sign: 'bg-purple-500',
   create_issue: 'bg-red-500',
-  reinspection: 'bg-amber-500',
+  start_reinspection: 'bg-amber-400',
+  submit_reinspection: 'bg-amber-600',
   close_issue: 'bg-emerald-500',
 };
 
@@ -40,8 +42,10 @@ export default function InspectionForm({ inspectionId, onClose }: InspectionForm
   const [reinspectionNote, setReinspectionNote] = useState('');
 
   const batch = batches.find((b) => b.id === inspection.batchId);
-  const isEditable = currentRole === '质检员' && !inspection.result;
-  const isReinspectable = currentRole === '质检员' && inspection.result === '需复检';
+  const isInitialEditable = currentRole === '质检员' && !inspection.result && !inspection.isReinspecting;
+  const isReinspecting = currentRole === '质检员' && inspection.isReinspecting;
+  const isEditable = isInitialEditable || isReinspecting;
+  const isReinspectable = currentRole === '质检员' && inspection.result === '需复检' && !inspection.isReinspecting;
 
   const totalItems = inspection.checkItems.length;
   const checkedItems = inspection.checkItems.filter((c) => c.passed !== null).length;
@@ -53,16 +57,17 @@ export default function InspectionForm({ inspectionId, onClose }: InspectionForm
 
   const handleSubmit = () => {
     if (!allChecked) return;
-    submitInspection(inspection.id);
+    if (isReinspecting) {
+      submitReinspection(inspection.id, reinspectionNote);
+      setReinspectionNote('');
+    } else {
+      submitInspection(inspection.id);
+    }
   };
 
   const handleStartReinspection = () => {
     startReinspection(inspection.id);
-  };
-
-  const handleSubmitReinspection = () => {
-    if (!allChecked) return;
-    submitReinspection(inspection.id, reinspectionNote);
+    setReinspectionNote('');
   };
 
   const getPredictionStyle = () => {
@@ -98,7 +103,12 @@ export default function InspectionForm({ inspectionId, onClose }: InspectionForm
         <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b border-zinc-100 flex items-center justify-between shrink-0">
           <div>
             <h3 className="text-lg font-bold text-zinc-900">
-              {inspection.result === null && inspection.reinspectionCount > 0 ? '复检检查' : '验收检查'}
+              {isReinspecting && (
+                <span className="inline-flex items-center gap-1.5 mr-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full align-middle">
+                  <RefreshCw size={12} /> 复检中
+                </span>
+              )}
+              {inspection.result === null && inspection.reinspectionCount > 0 && !isReinspecting ? '复检检查' : '验收检查'}
             </h3>
             <p className="text-xs text-zinc-500">
               验收单号: {inspection.id}
@@ -139,24 +149,44 @@ export default function InspectionForm({ inspectionId, onClose }: InspectionForm
               className="w-full py-3 bg-amber-50 border-2 border-dashed border-amber-300 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-100 hover:border-amber-400 transition-all flex items-center justify-center gap-2"
             >
               <RefreshCw size={16} />
-              开始复检 · 重新确认检查项
+              开始第 {inspection.reinspectionCount + 1} 次复检 · 重新确认检查项
             </button>
           )}
 
           {isEditable && (
-            <div className="bg-[#FFF3ED] border border-orange-200 rounded-lg p-3.5">
+            <div className={cn(
+              'rounded-lg p-3.5 border',
+              isReinspecting ? 'bg-amber-50 border-amber-200' : 'bg-[#FFF3ED] border-orange-200'
+            )}>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-[#E8652A]">检查进度</span>
-                <span className="text-xs text-[#E8652A] font-mono">{checkedItems} / {totalItems}</span>
+                <span className={cn(
+                  'text-xs font-semibold',
+                  isReinspecting ? 'text-amber-700' : 'text-[#E8652A]'
+                )}>
+                  {isReinspecting ? `第 ${inspection.reinspectionCount + 1} 次复检进度` : '检查进度'}
+                </span>
+                <span className={cn(
+                  'text-xs font-mono',
+                  isReinspecting ? 'text-amber-700' : 'text-[#E8652A]'
+                )}>{checkedItems} / {totalItems}</span>
               </div>
-              <div className="w-full h-2 bg-orange-100 rounded-full overflow-hidden">
+              <div className={cn(
+                'w-full h-2 rounded-full overflow-hidden',
+                isReinspecting ? 'bg-amber-100' : 'bg-orange-100'
+              )}>
                 <div
-                  className="h-full bg-[#E8652A] rounded-full transition-all duration-300"
+                  className={cn(
+                    'h-full rounded-full transition-all duration-300',
+                    isReinspecting ? 'bg-amber-500' : 'bg-[#E8652A]'
+                  )}
                   style={{ width: `${(checkedItems / totalItems) * 100}%` }}
                 />
               </div>
               {uncheckedItems.length > 0 && (
-                <p className="text-[11px] text-orange-600 mt-2">
+                <p className={cn(
+                  'text-[11px] mt-2',
+                  isReinspecting ? 'text-amber-600' : 'text-orange-600'
+                )}>
                   还差 {uncheckedItems.length} 项：{uncheckedItems.map((i) => i.name).join('、')}
                 </p>
               )}
@@ -171,7 +201,7 @@ export default function InspectionForm({ inspectionId, onClose }: InspectionForm
               )}
             >
               <p className="text-xs text-zinc-500 mb-1.5">
-                {allChecked ? '最终判定' : '预计去向'}
+                {allChecked ? (isReinspecting ? '复检最终判定' : '最终判定') : (isReinspecting ? '复检预计去向' : '预计去向')}
               </p>
               {getPredictionBadge()}
               {failedItems.length > 0 && (
@@ -188,7 +218,9 @@ export default function InspectionForm({ inspectionId, onClose }: InspectionForm
           )}
 
           <div>
-            <p className="text-xs text-zinc-500 mb-3">检查项</p>
+            <p className="text-xs text-zinc-500 mb-3">
+              {isReinspecting ? `第 ${inspection.reinspectionCount + 1} 次复检项` : '检查项'}
+            </p>
             <div className="space-y-2">
               {inspection.checkItems.map((item, idx) => (
                 <div
@@ -268,23 +300,23 @@ export default function InspectionForm({ inspectionId, onClose }: InspectionForm
             </div>
           </div>
 
-          {isEditable && inspection.reinspectionCount > 0 && (
+          {isEditable && isReinspecting && (
             <div>
               <label className="block text-xs font-medium text-zinc-600 mb-1.5">
                 <RefreshCw size={12} className="inline mr-1" />
-                复检说明
+                第 {inspection.reinspectionCount + 1} 次复检说明 <span className="text-zinc-400">（选填）</span>
               </label>
               <textarea
                 value={reinspectionNote}
                 onChange={(e) => setReinspectionNote(e.target.value)}
                 rows={3}
-                placeholder="请描述复检情况（选填）..."
+                placeholder="请描述本次复检情况，如：供应商已补发正确检测报告..."
                 className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400 resize-none"
               />
             </div>
           )}
 
-          {!inspection.result && isEditable && (
+          {!inspection.result && isEditable && !isReinspecting && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
               <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
               <div className="text-xs text-amber-700">
@@ -292,6 +324,20 @@ export default function InspectionForm({ inspectionId, onClose }: InspectionForm
                 <ul className="space-y-0.5 text-amber-600">
                   <li>• 全部符合 → 可接收</li>
                   <li>• 1 项不符合 → 需复检</li>
+                  <li>• 2 项及以上不符合 → 拒收</li>
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {!inspection.result && isReinspecting && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+              <RefreshCw size={18} className="text-amber-500 shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-700">
+                <p className="font-semibold mb-1">复检规则</p>
+                <ul className="space-y-0.5 text-amber-600">
+                  <li>• 全部符合 → 转为可接收</li>
+                  <li>• 1 项不符合 → 继续需复检</li>
                   <li>• 2 项及以上不符合 → 拒收</li>
                 </ul>
               </div>
@@ -318,10 +364,33 @@ export default function InspectionForm({ inspectionId, onClose }: InspectionForm
                   验收人: {inspection.inspector} · {new Date(inspection.inspectedAt).toLocaleString('zh-CN')}
                 </p>
               )}
-              {inspection.reinspectionNote && (
-                <p className="text-[11px] text-amber-600 mt-2 pt-2 border-t border-amber-200">
-                  复检说明: {inspection.reinspectionNote}
-                </p>
+              {inspection.reinspectionCount > 0 && (
+                <div className="mt-3 pt-3 border-t border-amber-200/60 text-left space-y-2">
+                  <p className="text-[11px] font-semibold text-amber-700 flex items-center gap-1">
+                    <History size={12} /> 复检记录（共 {inspection.reinspectionCount} 次）
+                  </p>
+                  {inspection.reinspectionHistory.map((record) => (
+                    <div key={record.count} className="bg-white/60 rounded-lg p-2.5 border border-amber-200/60">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-amber-700">第 {record.count} 次复检</span>
+                        <StatusBadge status={record.result} />
+                      </div>
+                      <p className="text-[10px] text-zinc-500">
+                        {new Date(record.inspectedAt).toLocaleString('zh-CN')}
+                      </p>
+                      {record.failedItems.length > 0 && (
+                        <p className="text-[11px] text-amber-600 mt-1">
+                          不符合项: {record.failedItems.join('、')}
+                        </p>
+                      )}
+                      {record.note && (
+                        <p className="text-[11px] text-zinc-600 mt-1 bg-white/80 rounded px-2 py-1">
+                          说明: {record.note}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )}
@@ -351,7 +420,6 @@ export default function InspectionForm({ inspectionId, onClose }: InspectionForm
                   .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
                   .map((log, idx) => {
                     const Icon = logIcons[log.type];
-                    const isLast = idx === inspection.logs.length - 1;
                     return (
                       <div key={log.id} className="relative">
                         <div
@@ -393,12 +461,17 @@ export default function InspectionForm({ inspectionId, onClose }: InspectionForm
                 暂存退出
               </button>
               <button
-                onClick={inspection.reinspectionCount > 0 ? handleSubmitReinspection : handleSubmit}
+                onClick={handleSubmit}
                 disabled={!allChecked}
-                className="flex-1 py-2.5 text-sm text-white bg-[#E8652A] hover:bg-[#d4581f] rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                className={cn(
+                  'flex-1 py-2.5 text-sm text-white rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5',
+                  isReinspecting
+                    ? 'bg-amber-500 hover:bg-amber-600'
+                    : 'bg-[#E8652A] hover:bg-[#d4581f]'
+                )}
               >
-                {inspection.reinspectionCount > 0 ? (
-                  <><RefreshCw size={14} /> 提交复检</>
+                {isReinspecting ? (
+                  <><RefreshCw size={14} /> 提交第 {inspection.reinspectionCount + 1} 次复检</>
                 ) : (
                   <><FileCheck size={14} /> 提交验收</>
                 )}

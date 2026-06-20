@@ -8,7 +8,9 @@ export type IssueStatus = '待整改' | '整改中' | '已关闭';
 
 export type UserRole = '材料员' | '质检员' | '监理工程师';
 
-export type LogType = 'start_inspection' | 'submit_result' | 'sign' | 'create_issue' | 'reinspection' | 'close_issue';
+export type LogType = 'start_inspection' | 'submit_result' | 'sign' | 'create_issue' | 'start_reinspection' | 'submit_reinspection' | 'close_issue';
+
+export type IssueTriggerSource = 'initial_inspection' | 'reinspection';
 
 export interface CheckItem {
   name: string;
@@ -40,6 +42,14 @@ export interface Batch {
   createdAt: string;
 }
 
+export interface ReinspectionRecord {
+  count: number;
+  result: InspectionResult;
+  note: string;
+  inspectedAt: string;
+  failedItems: string[];
+}
+
 export interface Inspection {
   id: string;
   batchId: string;
@@ -53,6 +63,8 @@ export interface Inspection {
   reinspectionCount: number;
   lastReinspectionAt: string | null;
   reinspectionNote: string;
+  isReinspecting: boolean;
+  reinspectionHistory: ReinspectionRecord[];
   logs: OperationLog[];
 }
 
@@ -70,4 +82,6 @@ export interface Issue {
   createdAt: string;
   closedAt: string | null;
   isDraft: boolean;
+  triggerSource: IssueTriggerSource;
+  triggerReinspectionCount: number;
 }

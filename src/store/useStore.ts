@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Batch, Inspection, Issue, UserRole, CheckItem, OperationLog } from '@/types';
+import type { Batch, Inspection, Issue, UserRole, CheckItem, OperationLog, ReinspectionRecord, IssueTriggerSource } from '@/types';
 import { mockBatches, mockInspections, mockIssues, DEFAULT_CHECK_ITEMS } from '@/data/mock';
 
 interface AppState {
@@ -22,7 +22,7 @@ interface AppState {
   closeIssue: (issueId: string) => void;
   startReinspection: (inspectionId: string) => void;
   submitReinspection: (inspectionId: string, note: string) => void;
-  createIssueDraft: (inspectionId: string) => Issue | null;
+  createIssueDraft: (inspectionId: string, triggerSource: IssueTriggerSource, triggerReinspectionCount: number) => Issue | null;
   updateIssueDraft: (issueId: string, data: Partial<Issue>) => void;
   addLog: (inspectionId: string, log: Omit<OperationLog, 'id' | 'timestamp'>) => void;
 }
@@ -97,7 +97,7 @@ export const useStore = create<AppState>()(
         });
       };
 
-      const createIssueDraft = (inspectionId: string): Issue | null => {
+      const createIssueDraft = (inspectionId: string, triggerSource: IssueTriggerSource, triggerReinspectionCount: number): Issue | null => {
         const state = get();
         const insp = state.inspections.find((i) => i.id === inspectionId);
         const batch = state.batches.find((b) => b.id === insp?.batchId);
@@ -124,6 +124,8 @@ export const useStore = create<AppState>()(
           createdAt: new Date().toISOString(),
           closedAt: null,
           isDraft: true,
+          triggerSource,
+          triggerReinspectionCount,
         };
 
         return draft;
@@ -178,6 +180,8 @@ export const useStore = create<AppState>()(
             reinspectionCount: 0,
             lastReinspectionAt: null,
             reinspectionNote: '',
+            isReinspecting: false,
+            reinspectionHistory: [],
             logs: [
               {
                 id: logId,
@@ -250,7 +254,7 @@ export const useStore = create<AppState>()(
             let newCounters = { ...s.counters, log: s.counters.log + 1 };
 
             if (result === '需复检' || result === '拒收') {
-              const draft = createIssueDraft(inspectionId);
+              const draft = createIssueDraft(inspectionId, 'initial_inspection', 0);
               if (draft) {
                 const newIssueId = nextId('Q', newCounters.issue + 1);
                 const newIssue: Issue = {
@@ -317,6 +321,8 @@ export const useStore = create<AppState>()(
             createdAt: new Date().toISOString(),
             closedAt: null,
             isDraft: issue.isDraft ?? false,
+            triggerSource: issue.triggerSource ?? 'initial_inspection',
+            triggerReinspectionCount: issue.triggerReinspectionCount ?? 0,
           };
 
           set((s) => {
@@ -342,11 +348,39 @@ export const useStore = create<AppState>()(
         },
 
         updateIssueDraft: (issueId, data) => {
-          set((s) => ({
-            issues: s.issues.map((iss) =>
+          const state = get();
+          const issue = state.issues.find((i) => i.id === issueId);
+          if (!issue) return;
+
+          set((s) => {
+            const wasDraft = issue.isDraft;
+            const updatedIssues = s.issues.map((iss) =>
               iss.id === issueId ? { ...iss, ...data, isDraft: false } : iss
-            ),
-          }));
+            );
+
+            if (!wasDraft) {
+              return { issues: updatedIssues };
+            }
+
+            const newLogId = nextId('L', s.counters.log + 1);
+            const newLog: OperationLog = {
+              id: newLogId,
+              type: 'create_issue',
+              operator: s.currentRole,
+              timestamp: new Date().toISOString(),
+              description: `确认整改单 ${issueId}${issue.triggerSource === 'reinspection' ? `（第${issue.triggerReinspectionCount}次复检触发）` : ''}`,
+            };
+
+            return {
+              issues: updatedIssues,
+              inspections: s.inspections.map((i) =>
+                i.id === issue.inspectionId
+                  ? { ...i, logs: [...i.logs, newLog] }
+                  : i
+              ),
+              counters: { ...s.counters, log: s.counters.log + 1 },
+            };
+          });
         },
 
         submitRectification: (issueId, photos, note) => {
@@ -391,17 +425,35 @@ export const useStore = create<AppState>()(
         },
 
         startReinspection: (inspectionId) => {
-          set((s) => ({
-            inspections: s.inspections.map((insp) =>
-              insp.id === inspectionId
-                ? {
-                    ...insp,
-                    result: null,
-                    checkItems: DEFAULT_CHECK_ITEMS.map((item) => ({ ...item })),
-                  }
-                : insp
-            ),
-          }));
+          set((s) => {
+            const insp = s.inspections.find((i) => i.id === inspectionId);
+            if (!insp) return {};
+
+            const newLogId = nextId('L', s.counters.log + 1);
+            const nextCount = insp.reinspectionCount + 1;
+            const newLog: OperationLog = {
+              id: newLogId,
+              type: 'start_reinspection',
+              operator: s.currentRole,
+              timestamp: new Date().toISOString(),
+              description: `开始第 ${nextCount} 次复检`,
+            };
+
+            return {
+              inspections: s.inspections.map((i) =>
+                i.id === inspectionId
+                  ? {
+                      ...i,
+                      result: null,
+                      isReinspecting: true,
+                      checkItems: DEFAULT_CHECK_ITEMS.map((item) => ({ ...item })),
+                      logs: [...i.logs, newLog],
+                    }
+                  : i
+              ),
+              counters: { ...s.counters, log: s.counters.log + 1 },
+            };
+          });
         },
 
         submitReinspection: (inspectionId, note) => {
@@ -413,17 +465,47 @@ export const useStore = create<AppState>()(
           if (!result) return;
 
           const failedItems = insp.checkItems.filter((c) => c.passed === false).map((c) => c.name);
+          const nextCount = insp.reinspectionCount + 1;
 
           set((s) => {
             const newLogId = nextId('L', s.counters.log + 1);
             const newLog: OperationLog = {
               id: newLogId,
-              type: 'reinspection',
+              type: 'submit_reinspection',
               operator: s.currentRole,
               timestamp: new Date().toISOString(),
-              description: `复检结论：${result}${note ? ` - ${note}` : ''}`,
-              details: { failedItems, note },
+              description: `第 ${nextCount} 次复检结论：${result}${note ? ` - ${note}` : ''}`,
+              details: { failedItems, note, count: nextCount },
             };
+
+            const reinspectionRecord: ReinspectionRecord = {
+              count: nextCount,
+              result,
+              note,
+              inspectedAt: new Date().toISOString(),
+              failedItems,
+            };
+
+            let updatedIssues = s.issues;
+            let newCounters = { ...s.counters, log: s.counters.log + 1 };
+
+            if (result === '需复检' || result === '拒收') {
+              const draft = createIssueDraft(inspectionId, 'reinspection', nextCount);
+              if (draft) {
+                const existingDraft = s.issues.find(
+                  (i) => i.inspectionId === inspectionId && i.isDraft && i.triggerReinspectionCount === nextCount
+                );
+                if (!existingDraft) {
+                  const newIssueId = nextId('Q', newCounters.issue + 1);
+                  const newIssue: Issue = {
+                    ...draft,
+                    id: newIssueId,
+                  };
+                  updatedIssues = [newIssue, ...s.issues];
+                  newCounters = { ...newCounters, issue: newCounters.issue + 1 };
+                }
+              }
+            }
 
             return {
               inspections: s.inspections.map((i) =>
@@ -431,15 +513,18 @@ export const useStore = create<AppState>()(
                   ? {
                       ...i,
                       result,
-                      reinspectionCount: i.reinspectionCount + 1,
+                      isReinspecting: false,
+                      reinspectionCount: nextCount,
                       lastReinspectionAt: new Date().toISOString(),
                       reinspectionNote: note,
                       inspectedAt: new Date().toISOString(),
+                      reinspectionHistory: [...i.reinspectionHistory, reinspectionRecord],
                       logs: [...i.logs, newLog],
                     }
                   : i
               ),
-              counters: { ...s.counters, log: s.counters.log + 1 },
+              issues: updatedIssues,
+              counters: newCounters,
             };
           });
         },

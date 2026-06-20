@@ -1,18 +1,19 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useStore, calculateResult } from '@/store/useStore';
 import StatusBadge from '@/components/ui/StatusBadge';
 import PhotoGrid from '@/components/ui/PhotoGrid';
 import InspectionForm from './InspectionForm';
 import SignPanel from './SignPanel';
 import type { Inspection, InspectionResult } from '@/types';
-import { FileCheck, Clock, Edit3 } from 'lucide-react';
+import { FileCheck, Clock, Edit3, PenLine, RefreshCw, AlertTriangle, FileText } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 type FilterTab = '全部' | '未完成' | InspectionResult;
 
 const tabs: FilterTab[] = ['全部', '未完成', '可接收', '需复检', '拒收'];
 
 export default function InspectionList() {
-  const { inspections, batches, currentRole } = useStore();
+  const { inspections, batches, currentRole, issues } = useStore();
   const [activeTab, setActiveTab] = useState<FilterTab>('全部');
   const [selectedInspection, setSelectedInspection] = useState<Inspection | null>(null);
   const [showSignPanel, setShowSignPanel] = useState(false);
@@ -24,6 +25,22 @@ export default function InspectionList() {
     if (activeTab === '未完成') return i.result === null;
     return i.result === activeTab;
   });
+
+  const todoStats = useMemo(() => {
+    const pendingReinspection = inspections.filter(
+      (i) => i.result === '需复检' && !i.isReinspecting
+    ).length;
+    const pendingSign = inspections.filter(
+      (i) => i.result && !i.signedAt
+    ).length;
+    const pendingDraftConfirm = issues.filter(
+      (i) => i.isDraft
+    ).length;
+    return { pendingReinspection, pendingSign, pendingDraftConfirm };
+  }, [inspections, issues]);
+
+  const hasPendingDraft = (inspectionId: string) =>
+    issues.some((i) => i.inspectionId === inspectionId && i.isDraft);
 
   const kanbanColumns = [
     { key: '未完成', label: '未完成', color: 'text-zinc-700', bgColor: 'bg-zinc-100', icon: Clock, filterFn: (i: Inspection) => i.result === null },
@@ -38,15 +55,84 @@ export default function InspectionList() {
   };
 
   const canEdit = (insp: Inspection) => {
-    return currentRole === '质检员' && insp.result === null;
+    return currentRole === '质检员' && (insp.result === null || insp.isReinspecting);
   };
+
+  const getTodoBadges = (insp: Inspection) => {
+    const badges: { label: string; icon: React.ElementType; className: string }[] = [];
+
+    if (insp.isReinspecting) {
+      badges.push({
+        label: '复检中',
+        icon: RefreshCw,
+        className: 'bg-amber-100 text-amber-700 border-amber-300',
+      });
+    }
+
+    if (currentRole === '质检员' && insp.result === '需复检' && !insp.isReinspecting) {
+      badges.push({
+        label: '待复检',
+        icon: RefreshCw,
+        className: 'bg-amber-500 text-white border-amber-600 shadow-sm shadow-amber-200',
+      });
+    }
+
+    if (currentRole === '监理工程师' && insp.result && !insp.signedAt) {
+      badges.push({
+        label: '待签署',
+        icon: PenLine,
+        className: 'bg-purple-500 text-white border-purple-600 shadow-sm shadow-purple-200',
+      });
+    }
+
+    if (currentRole === '监理工程师' && hasPendingDraft(insp.id)) {
+      badges.push({
+        label: '草稿待确认',
+        icon: FileText,
+        className: 'bg-red-500 text-white border-red-600 shadow-sm shadow-red-200',
+      });
+    }
+
+    return badges;
+  };
+
+  const showTodoBanner = currentRole !== '材料员' && (todoStats.pendingReinspection > 0 || todoStats.pendingSign > 0 || todoStats.pendingDraftConfirm > 0);
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold text-zinc-900">现场验收单</h2>
-        <p className="text-sm text-zinc-500 mt-0.5">共 {inspections.length} 份验收单</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-zinc-900">现场验收单</h2>
+          <p className="text-sm text-zinc-500 mt-0.5">共 {inspections.length} 份验收单</p>
+        </div>
       </div>
+
+      {showTodoBanner && (
+        <div className="bg-gradient-to-r from-[#FFF3ED] to-white border border-orange-200 rounded-xl p-4 flex items-center gap-4 flex-wrap">
+          <AlertTriangle size={20} className="text-[#E8652A] shrink-0" />
+          <div className="flex items-center gap-3 flex-wrap flex-1">
+            <span className="text-sm font-semibold text-zinc-800">待办提醒：</span>
+            {currentRole === '质检员' && todoStats.pendingReinspection > 0 && (
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500 text-white rounded-full text-xs font-medium shadow-sm">
+                <RefreshCw size={12} />
+                待复检 {todoStats.pendingReinspection} 张
+              </div>
+            )}
+            {currentRole === '监理工程师' && todoStats.pendingSign > 0 && (
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-purple-500 text-white rounded-full text-xs font-medium shadow-sm">
+                <PenLine size={12} />
+                待签署 {todoStats.pendingSign} 张
+              </div>
+            )}
+            {currentRole === '监理工程师' && todoStats.pendingDraftConfirm > 0 && (
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-red-500 text-white rounded-full text-xs font-medium shadow-sm">
+                <FileText size={12} />
+                草稿待确认 {todoStats.pendingDraftConfirm} 条
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-1.5 flex-wrap">
         {tabs.map((tab) => (
@@ -76,7 +162,7 @@ export default function InspectionList() {
                   <span className={`text-sm font-semibold ${col.color}`}>{col.label}</span>
                   <span className={`text-xs ${col.color} opacity-60`}>({items.length})</span>
                 </div>
-                <div className="space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto">
+                <div className="space-y-2 max-h-[calc(100vh-340px)] overflow-y-auto">
                   {items.length === 0 ? (
                     <div className="text-center py-8 text-xs text-zinc-400 bg-white rounded-lg border border-zinc-100">
                       暂无数据
@@ -85,10 +171,17 @@ export default function InspectionList() {
                     items.map((insp) => {
                       const batch = getBatch(insp.batchId);
                       const isEditable = canEdit(insp);
+                      const todoBadges = getTodoBadges(insp);
+                      const hasTodo = todoBadges.length > 0;
                       return (
                         <div
                           key={insp.id}
-                          className="bg-white rounded-lg border border-zinc-200 p-3.5 hover:shadow-md transition-shadow cursor-pointer group"
+                          className={cn(
+                            'bg-white rounded-lg border p-3.5 hover:shadow-md transition-shadow cursor-pointer group',
+                            hasTodo
+                              ? 'border-2 border-[#E8652A]/40 shadow-[0_0_0_3px_rgba(232,101,42,0.08)]'
+                              : 'border-zinc-200'
+                          )}
                           onClick={() => setSelectedInspection(insp)}
                         >
                           <div className="flex items-center justify-between mb-2">
@@ -97,10 +190,31 @@ export default function InspectionList() {
                               <StatusBadge status={insp.result} />
                             ) : (
                               <span className="text-[10px] text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-full">
-                                进行中
+                                {insp.isReinspecting ? '复检中' : '进行中'}
                               </span>
                             )}
                           </div>
+
+                          {todoBadges.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mb-2">
+                              {todoBadges.map((badge, idx) => {
+                                const BadgeIcon = badge.icon;
+                                return (
+                                  <span
+                                    key={idx}
+                                    className={cn(
+                                      'inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full border',
+                                      badge.className
+                                    )}
+                                  >
+                                    <BadgeIcon size={9} />
+                                    {badge.label}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+
                           <div className="text-sm font-medium text-zinc-900 mb-1">
                             {batch?.category} · {batch?.specification}
                           </div>
@@ -111,15 +225,16 @@ export default function InspectionList() {
                             </div>
                             {isEditable && (
                               <span className="text-[10px] text-[#E8652A] flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Edit3 size={10} /> 继续验收
+                                <Edit3 size={10} />
+                                {insp.isReinspecting ? '继续复检' : '继续验收'}
                               </span>
                             )}
                             {insp.result && !insp.signedAt && currentRole === '监理工程师' && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleOpenSign(insp); }}
-                                className="text-[10px] text-purple-600 hover:underline"
+                                className="text-[10px] text-purple-600 hover:underline font-medium"
                               >
-                                签署
+                                立即签署
                               </button>
                             )}
                           </div>
@@ -138,7 +253,7 @@ export default function InspectionList() {
           })}
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-zinc-200 shadow-sm">
+        <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-zinc-50 text-zinc-500 text-xs">
@@ -148,6 +263,7 @@ export default function InspectionList() {
                 <th className="text-left px-4 py-3 font-medium">供应商</th>
                 <th className="text-left px-4 py-3 font-medium">验收员</th>
                 <th className="text-center px-4 py-3 font-medium">结论</th>
+                <th className="text-center px-4 py-3 font-medium">待办</th>
                 <th className="text-center px-4 py-3 font-medium">签署</th>
                 <th className="text-center px-4 py-3 font-medium">操作</th>
               </tr>
@@ -155,18 +271,22 @@ export default function InspectionList() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-zinc-400">暂无数据</td>
+                  <td colSpan={9} className="text-center py-12 text-zinc-400">暂无数据</td>
                 </tr>
               ) : (
                 filtered.map((insp, idx) => {
                   const batch = getBatch(insp.batchId);
                   const isEditable = canEdit(insp);
+                  const todoBadges = getTodoBadges(insp);
+                  const hasTodo = todoBadges.length > 0;
                   return (
                     <tr
                       key={insp.id}
-                      className={`border-t border-zinc-50 hover:bg-orange-50/30 transition cursor-pointer ${
-                        idx % 2 === 1 ? 'bg-zinc-50/50' : ''
-                      }`}
+                      className={cn(
+                        'border-t border-zinc-50 hover:bg-orange-50/30 transition cursor-pointer',
+                        idx % 2 === 1 ? 'bg-zinc-50/50' : '',
+                        hasTodo ? '!bg-[#FFF3ED]/40' : ''
+                      )}
                       onClick={() => setSelectedInspection(insp)}
                     >
                       <td className="px-4 py-3 font-mono text-xs text-[#E8652A]">{insp.id}</td>
@@ -178,8 +298,31 @@ export default function InspectionList() {
                         {insp.result ? (
                           <StatusBadge status={insp.result} />
                         ) : (
-                          <span className="text-xs text-zinc-400">未完成</span>
+                          <span className="text-xs text-zinc-400">
+                            {insp.isReinspecting ? '复检中' : '未完成'}
+                          </span>
                         )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-center flex-wrap gap-1">
+                          {todoBadges.length > 0 ? todoBadges.map((badge, bidx) => {
+                            const BadgeIcon = badge.icon;
+                            return (
+                              <span
+                                key={bidx}
+                                className={cn(
+                                  'inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full border',
+                                  badge.className
+                                )}
+                              >
+                                <BadgeIcon size={9} />
+                                {badge.label}
+                              </span>
+                            );
+                          }) : (
+                            <span className="text-xs text-zinc-300">-</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-center">
                         {insp.signedAt ? (
@@ -190,10 +333,10 @@ export default function InspectionList() {
                       </td>
                       <td className="px-4 py-3 text-center space-x-2" onClick={(e) => e.stopPropagation()}>
                         <button onClick={() => setSelectedInspection(insp)} className="text-xs text-[#E8652A] hover:underline">
-                          {isEditable ? '继续验收' : '查看'}
+                          {isEditable ? (insp.isReinspecting ? '继续复检' : '继续验收') : '查看'}
                         </button>
                         {insp.result && !insp.signedAt && currentRole === '监理工程师' && (
-                          <button onClick={() => handleOpenSign(insp)} className="text-xs text-purple-600 hover:underline">
+                          <button onClick={() => handleOpenSign(insp)} className="text-xs text-purple-600 hover:underline font-medium">
                             签署
                           </button>
                         )}

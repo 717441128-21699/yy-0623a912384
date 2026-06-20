@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import StatusBadge from '@/components/ui/StatusBadge';
 import RectifyPanel from './RectifyPanel';
+import IssueDetailPanel from './IssueDetailPanel';
 import type { Issue, IssueStatus } from '@/types';
-import { Clock, AlertCircle, CheckCircle2, ChevronRight } from 'lucide-react';
+import { Clock, AlertCircle, CheckCircle2, ChevronRight, Eye, ExternalLink, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type StatusFilter = IssueStatus | '全部';
@@ -19,6 +20,7 @@ export default function IssueList() {
   const { issues, batches, inspections, currentRole, closeIssue } = useStore();
   const [filter, setFilter] = useState<StatusFilter>('全部');
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [detailIssueId, setDetailIssueId] = useState<string | null>(null);
 
   const draftIssues = issues.filter((i) => i.isDraft);
   const formalIssues = issues.filter((i) => !i.isDraft);
@@ -72,6 +74,7 @@ export default function IssueList() {
             const batch = getBatch(issue.batchId);
             const insp = getInspection(issue.inspectionId);
             const Icon = statusIcons[issue.status];
+            const isReinspectionTrigger = issue.triggerSource === 'reinspection';
 
             return (
               <div
@@ -90,12 +93,21 @@ export default function IssueList() {
                     <Icon size={20} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="text-xs font-mono text-[#E8652A]">{issue.id}</span>
                       <StatusBadge status={issue.status} />
+                      {isReinspectionTrigger ? (
+                        <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full flex items-center gap-1">
+                          <RefreshCw size={9} /> 第{issue.triggerReinspectionCount}次复检触发
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                          首次验收触发
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm font-medium text-zinc-900 mb-1">{issue.description}</p>
-                    <div className="flex items-center gap-3 text-xs text-zinc-500 mb-3">
+                    <div className="flex items-center gap-3 text-xs text-zinc-500 mb-3 flex-wrap">
                       {batch && (
                         <span>{batch.category} · {batch.specification}</span>
                       )}
@@ -122,7 +134,13 @@ export default function IssueList() {
                       </div>
                     )}
 
-                    <div className="mt-3 flex items-center gap-2">
+                    <div className="mt-3 flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => setDetailIssueId(issue.id)}
+                        className="text-xs text-[#1B2A4A] hover:underline flex items-center gap-1 bg-[#1B2A4A]/5 px-2.5 py-1 rounded transition hover:bg-[#1B2A4A]/10"
+                      >
+                        <Eye size={12} /> 按验收单查看详情
+                      </button>
                       {currentRole === '材料员' && (issue.status === '待整改' || issue.status === '整改中') && !issue.rectificationNote && (
                         <button
                           onClick={() => setSelectedIssue(issue)}
@@ -143,7 +161,7 @@ export default function IssueList() {
                         onClick={() => setSelectedIssue(issue)}
                         className="text-xs text-zinc-500 hover:underline"
                       >
-                        查看详情
+                        处理详情
                       </button>
                     </div>
                   </div>
@@ -156,6 +174,10 @@ export default function IssueList() {
 
       {selectedIssue && (
         <RectifyPanel issueId={selectedIssue.id} onClose={() => setSelectedIssue(null)} />
+      )}
+
+      {detailIssueId && (
+        <IssueDetailPanel issueId={detailIssueId} onClose={() => setDetailIssueId(null)} />
       )}
     </div>
   );

@@ -66,6 +66,8 @@ export default function SignPanel({ inspectionId, onClose }: SignPanelProps) {
       reviewDate: new Date(reviewDate).toISOString(),
       createdBy: currentRole,
       isDraft: false,
+      triggerSource: inspection.reinspectionCount > 0 ? 'reinspection' : 'initial_inspection',
+      triggerReinspectionCount: inspection.reinspectionCount,
     });
     setShowIssueForm(false);
     signInspection(inspection.id, opinion || '发现问题，已生成整改单');

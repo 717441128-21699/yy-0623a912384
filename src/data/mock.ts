@@ -111,6 +111,8 @@ export const mockInspections: Inspection[] = [
     reinspectionCount: 0,
     lastReinspectionAt: null,
     reinspectionNote: '',
+    isReinspecting: false,
+    reinspectionHistory: [],
     logs: [
       {
         id: 'L001',
@@ -147,6 +149,8 @@ export const mockInspections: Inspection[] = [
     reinspectionCount: 0,
     lastReinspectionAt: null,
     reinspectionNote: '',
+    isReinspecting: false,
+    reinspectionHistory: [],
     logs: [
       {
         id: 'L003',
@@ -190,6 +194,8 @@ export const mockInspections: Inspection[] = [
     reinspectionCount: 0,
     lastReinspectionAt: null,
     reinspectionNote: '',
+    isReinspecting: false,
+    reinspectionHistory: [],
     logs: [
       {
         id: 'L006',
@@ -229,7 +235,7 @@ export const mockIssues: Issue[] = [
     id: 'Q001',
     inspectionId: 'I003',
     batchId: 'B004',
-    description: '钢筋表面锈蚀，批号与合格证不一致',
+    description: '钢筋 HRB400 Φ20：外观质量（部分钢筋表面有锈蚀）；检测报告（批号与合格证不一致）',
     responsibleUnit: '供应商',
     reviewDate: daysAgo(1),
     rectificationPhotos: [],
@@ -239,12 +245,14 @@ export const mockIssues: Issue[] = [
     createdAt: daysAgo(3),
     closedAt: null,
     isDraft: false,
+    triggerSource: 'initial_inspection',
+    triggerReinspectionCount: 0,
   },
   {
     id: 'Q002',
     inspectionId: 'I001',
     batchId: 'B002',
-    description: '水泥检测报告编号与送货单不符，需补正',
+    description: '水泥 P.O 42.5：检测报告（检测报告编号与送货单不符）',
     responsibleUnit: '供应商',
     reviewDate: daysAgo(0),
     rectificationPhotos: ['https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=corrected%20inspection%20report%20document%20cement&image_size=landscape_4_3'],
@@ -254,5 +262,7 @@ export const mockIssues: Issue[] = [
     createdAt: daysAgo(1),
     closedAt: null,
     isDraft: false,
+    triggerSource: 'initial_inspection',
+    triggerReinspectionCount: 0,
   },
 ];
