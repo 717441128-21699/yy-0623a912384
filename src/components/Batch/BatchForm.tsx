@@ -36,7 +36,7 @@ export default function BatchForm({ onClose }: BatchFormProps) {
     onClose();
   };
 
-  const isValid = supplier && specification && contractQuantity && plateNumber;
+  const isValid = supplier && specification && contractQuantity && plateNumber && deliveryPhotos.length > 0;
 
   return (
     <Modal open title="录入到场批次" onClose={onClose} width="max-w-xl">
@@ -124,8 +124,13 @@ export default function BatchForm({ onClose }: BatchFormProps) {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-zinc-600 mb-1">送货单照片</label>
+          <label className="block text-xs font-medium text-zinc-600 mb-1">
+            送货单照片 <span className="text-red-500">*</span>
+          </label>
           <PhotoUpload photos={deliveryPhotos} onChange={setDeliveryPhotos} />
+          {deliveryPhotos.length === 0 && (
+            <p className="text-[11px] text-zinc-400 mt-1.5">请至少上传 1 张送货单照片</p>
+          )}
         </div>
 
         <div className="flex justify-end gap-3 pt-2">
