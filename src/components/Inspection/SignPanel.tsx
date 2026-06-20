@@ -6,12 +6,15 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import PhotoGrid from '@/components/ui/PhotoGrid';
 
 interface SignPanelProps {
-  inspection: Inspection;
+  inspectionId: string;
   onClose: () => void;
 }
 
-export default function SignPanel({ inspection, onClose }: SignPanelProps) {
-  const { signInspection, batches, addIssue } = useStore();
+export default function SignPanel({ inspectionId, onClose }: SignPanelProps) {
+  const inspection = useStore((s) => s.inspections.find((i) => i.id === inspectionId)!);
+  const batches = useStore((s) => s.batches);
+  const signInspection = useStore((s) => s.signInspection);
+  const addIssue = useStore((s) => s.addIssue);
   const [opinion, setOpinion] = useState('');
   const [showIssueForm, setShowIssueForm] = useState(false);
   const [issueDesc, setIssueDesc] = useState('');

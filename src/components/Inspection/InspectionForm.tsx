@@ -6,12 +6,16 @@ import PhotoGrid from '@/components/ui/PhotoGrid';
 import { cn } from '@/lib/utils';
 
 interface InspectionFormProps {
-  inspection: Inspection;
+  inspectionId: string;
   onClose: () => void;
 }
 
-export default function InspectionForm({ inspection, onClose }: InspectionFormProps) {
-  const { updateCheckItem, submitInspection, batches, currentRole } = useStore();
+export default function InspectionForm({ inspectionId, onClose }: InspectionFormProps) {
+  const inspection = useStore((s) => s.inspections.find((i) => i.id === inspectionId)!);
+  const batches = useStore((s) => s.batches);
+  const currentRole = useStore((s) => s.currentRole);
+  const updateCheckItem = useStore((s) => s.updateCheckItem);
+  const submitInspection = useStore((s) => s.submitInspection);
   const batch = batches.find((b) => b.id === inspection.batchId);
   const isEditable = currentRole === '质检员' && !inspection.result;
 

@@ -141,7 +141,7 @@ export default function IssueList() {
       )}
 
       {selectedIssue && (
-        <RectifyPanel issue={selectedIssue} onClose={() => setSelectedIssue(null)} />
+        <RectifyPanel issueId={selectedIssue.id} onClose={() => setSelectedIssue(null)} />
       )}
     </div>
   );

@@ -7,12 +7,16 @@ import PhotoUpload from '@/components/ui/PhotoUpload';
 import PhotoGrid from '@/components/ui/PhotoGrid';
 
 interface RectifyPanelProps {
-  issue: Issue;
+  issueId: string;
   onClose: () => void;
 }
 
-export default function RectifyPanel({ issue, onClose }: RectifyPanelProps) {
-  const { submitRectification, closeIssue, batches, currentRole } = useStore();
+export default function RectifyPanel({ issueId, onClose }: RectifyPanelProps) {
+  const issue = useStore((s) => s.issues.find((i) => i.id === issueId)!);
+  const batches = useStore((s) => s.batches);
+  const currentRole = useStore((s) => s.currentRole);
+  const submitRectification = useStore((s) => s.submitRectification);
+  const closeIssue = useStore((s) => s.closeIssue);
   const [rectificationPhotos, setRectificationPhotos] = useState<string[]>(issue.rectificationPhotos);
   const [rectificationNote, setRectificationNote] = useState(issue.rectificationNote);
 

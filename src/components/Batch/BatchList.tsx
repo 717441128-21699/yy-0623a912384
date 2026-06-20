@@ -33,8 +33,6 @@ export default function BatchList() {
     return true;
   });
 
-  const selectedBatch = batches.find((b) => b.id === selectedBatchId);
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -163,8 +161,8 @@ export default function BatchList() {
       </div>
 
       {showForm && <BatchForm onClose={() => setShowForm(false)} />}
-      {selectedBatch && (
-        <BatchDetail batch={selectedBatch} onClose={() => setSelectedBatchId(null)} />
+      {selectedBatchId && (
+        <BatchDetail batchId={selectedBatchId} onClose={() => setSelectedBatchId(null)} />
       )}
     </div>
   );

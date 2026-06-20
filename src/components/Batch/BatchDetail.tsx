@@ -5,12 +5,15 @@ import PhotoGrid from '@/components/ui/PhotoGrid';
 import { useStore } from '@/store/useStore';
 
 interface BatchDetailProps {
-  batch: Batch;
+  batchId: string;
   onClose: () => void;
 }
 
-export default function BatchDetail({ batch, onClose }: BatchDetailProps) {
-  const { addInspection, currentRole, inspections } = useStore();
+export default function BatchDetail({ batchId, onClose }: BatchDetailProps) {
+  const batch = useStore((s) => s.batches.find((b) => b.id === batchId)!);
+  const inspections = useStore((s) => s.inspections);
+  const currentRole = useStore((s) => s.currentRole);
+  const addInspection = useStore((s) => s.addInspection);
   const existingInspection = inspections.find((i) => i.batchId === batch.id);
 
   const handleStartInspection = () => {

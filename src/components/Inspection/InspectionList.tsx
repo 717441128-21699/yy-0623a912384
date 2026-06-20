@@ -209,14 +209,14 @@ export default function InspectionList() {
 
       {selectedInspection && !showSignPanel && (
         <InspectionForm
-          inspection={selectedInspection}
+          inspectionId={selectedInspection.id}
           onClose={() => setSelectedInspection(null)}
         />
       )}
 
       {showSignPanel && selectedInspection && (
         <SignPanel
-          inspection={selectedInspection}
+          inspectionId={selectedInspection.id}
           onClose={() => { setShowSignPanel(false); setSelectedInspection(null); }}
         />
       )}
